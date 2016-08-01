@@ -1,0 +1,69 @@
+---
+title: "repro-research-1"
+author: "Jason Chui"
+date: "1 August 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Reproducible Research Peer 1
+## Getting and pre-processing data
+Read in the data in activity.csv into the "df" variable
+```{r}
+df = read.csv("activity.csv")
+```
+
+Transform the date column type from factor into Date
+```{r}
+df$date = as.Date(df$date, format="%Y-%m-%d")
+```
+
+## What is the total steps taken by day?
+To find the total steps by day, we can use tapply on df:
+```{r}
+totalSteps <- tapply(df$steps, df$date, FUN=sum, na.rm=TRUE)
+totalSteps
+```
+
+Another way to group the steps by day is to use aggregate:
+```{r}
+aggregate(steps ~ date, data = df, sum, na.rm = TRUE)
+```
+
+To plot a histogram of totalSteps, we are going to use ggplot2. We need to hence load ggplot2
+```{r}
+library(ggplot2)
+```
+
+We shall now use qplot to plot the histogram:
+```{r}
+qplot(totalSteps, binwidth=1000, xlab="Total steps each day", ylab="Frequency")
+```
+
+The mean and median of the total steps by day can be calculated as such:
+```{r}
+mean(totalSteps)
+median(totalSteps)
+```
+
+## What is average steps per 5-minute interval?
+To find out the average steps per 5-minute interval, we shall first aggregate the steps by the interval, and apply the mean() function to the aggregate.
+```{r}
+averageSteps <- aggregate(x=list(steps=df$steps), by=list(interval=df$interval),
+                      FUN=mean, na.rm=TRUE)
+```
+
+We can use ggplot to plot this line series.
+```{r}
+ggplot(data=averageSteps, aes(x=interval, y=steps)) +
+    geom_line() +
+    xlab("5-minute interval") +
+    ylab("average number of steps taken")
+```
+
+```{r}
+averageSteps[which.max(averageSteps$steps),]
+```
