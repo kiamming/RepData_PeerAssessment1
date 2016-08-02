@@ -25,12 +25,8 @@ df$date = as.Date(df$date, format="%Y-%m-%d")
 To find the total steps by day, we can use tapply on df:
 ```{r}
 totalSteps <- tapply(df$steps, df$date, FUN=sum, na.rm=TRUE)
-totalSteps
-```
-
-Another way to group the steps by day is to use aggregate:
-```{r}
-aggregate(steps ~ date, data = df, sum, na.rm = TRUE)
+head(totalSteps, 10)
+summary(totalSteps)
 ```
 
 To plot a histogram of totalSteps, we are going to use ggplot2. We need to hence load ggplot2
@@ -40,7 +36,7 @@ library(ggplot2)
 
 We shall now use qplot to plot the histogram:
 ```{r}
-qplot(totalSteps, binwidth=1000, xlab="Total steps each day", ylab="Frequency")
+qplot(totalSteps, geom="histogram", binwidth=5000, xlab="Total steps each day", ylab="Frequency", fill=I("red"), color=I("black"))
 ```
 
 The mean and median of the total steps by day can be calculated as such:
@@ -49,11 +45,43 @@ mean(totalSteps)
 median(totalSteps)
 ```
 
+### Using aggregate instead of tapply
+Another way to group the steps by day is to use aggregate:
+```{r}
+anotherSteps = aggregate(steps ~ date, data = df, sum, na.rm = TRUE)
+```
+The aggregate is formatted differently from the tapply, as such:
+```{r}
+head(anotherSteps, 10)
+summary(anotherSteps)
+mean(anotherSteps$steps)
+median(anotherSteps$steps)
+```
+
+Using the aggregate, a histogram can be plotted as such:
+```{r}
+hist(anotherSteps$steps, main = "Total steps each day", xlab = "day", col = "red")
+```
+
+Notice that the histogram plotted using the 2 methods are different. This is due to the default na.action of aggregate is na.action=na.omit. This means cells with na values are omitted from the aggregate. To get the same histogram, we can override the default na.action to be equal to NULL i.e. take no action.
+```{r}
+anotherSteps = aggregate(steps ~ date, data = df, sum, na.rm = TRUE, na.action=NULL)
+hist(anotherSteps$steps, main = "Total steps each day", xlab = "day", col = "red")
+```
+
+The mean and median should now match with the first method:
+```{r}
+summary(anotherSteps)
+mean(anotherSteps$steps)
+median(anotherSteps$steps)
+```
+
 ## What is average steps per 5-minute interval?
 To find out the average steps per 5-minute interval, we shall first aggregate the steps by the interval, and apply the mean() function to the aggregate.
 ```{r}
-averageSteps <- aggregate(x=list(steps=df$steps), by=list(interval=df$interval),
-                      FUN=mean, na.rm=TRUE)
+averageSteps <- aggregate(x=list(steps=df$steps),
+                          by=list(interval=df$interval),
+                          FUN=mean, na.rm=TRUE)
 ```
 
 We can use ggplot to plot this line series.
@@ -64,6 +92,76 @@ ggplot(data=averageSteps, aes(x=interval, y=steps)) +
     ylab("average number of steps taken")
 ```
 
+The interval in which there is a maximum number of steps can be found as such:
 ```{r}
 averageSteps[which.max(averageSteps$steps),]
+```
+
+### Using tapply
+Using tapply, the same information can be retrieved as such (note that the output is NOT shown):
+```{r results="hide", fig.keep="none"}
+anotherAverageSteps <- tapply(df$steps, df$interval, mean, na.rm = TRUE)
+plot(row.names(anotherAverageSteps), anotherAverageSteps, type = "l", 
+     xlab = "5-min interval", 
+     ylab = "average number of steps taken",col = "red")
+max_interval <- which.max(anotherAverageSteps)
+names(max_interval)
+```
+
+##Imputing missing values
+The number of missing values in the data is:
+```{r}
+sum(is.na(df$steps))
+```
+
+### Function to replace each missing value with the mean value of its 5-minute interval
+```{r}
+fill.value = function(steps, interval) {
+    filled <- NA
+    if (!is.na(steps))
+        filled <- c(steps)
+    else
+        filled <- (averageSteps[averageSteps$interval==interval, "steps"])
+    return(filled)
+}
+```
+
+Use mapply to apply the function fill.value() to fill in the na values in steps.
+```{r}
+filled.data = df
+filled.data$steps = mapply(fill.value, filled.data$steps, filled.data$interval)
+```
+
+Plotting a histogram of the total number of steps using the filled.data dataset. Notice that instead of having a peak in the first bin, where all the missing values are, and instead of simply removing all the na values, imputing the missing values help to distribute these missing values to their own intervals.
+```{r}
+newTotalSteps <- tapply(filled.data$steps, filled.data$date, FUN=sum, na.rm=TRUE)
+qplot(newTotalSteps, geom="histogram", binwidth=5000, xlab="Total steps each day", ylab="Frequency", fill=I("red"), color=I("black"))
+```
+
+## Weekdays vs weekends
+A function to differentiate between weekdays and weekends.
+```{r}
+weekDifferentiator <- function(date) {
+    day = weekdays(date)
+    if (day %in% c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday"))
+        return("weekday")
+    else if (day %in% c("Saturday", "Sunday"))
+        return("weekend")
+    else
+        stop("invalid")
+}
+filled.data$day = sapply(filled.data$date, FUN=weekDifferentiator)
+```
+
+Use the aggregate function to group the data by interval and weekday/weekend. Next, use ggplot to plot out the different facets.
+```{r}
+averages = aggregate(steps ~ interval + day, data=filled.data, mean)
+ggplot(averages, aes(interval, steps)) + geom_line() + facet_grid(day ~ .) + xlab("5-minute interval") + ylab("Number of steps")
+```
+
+Another way to plot using the lattice plotting system:
+```{r}
+names(averages) = c("interval", "day", "steps")
+library(lattice)
+xyplot(steps ~ interval | day, averages, index.cond=list(c(2,1)), type = "l", layout = c(1, 2), xlab = "Interval", ylab = "Number of steps")
 ```
